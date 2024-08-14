@@ -8,6 +8,11 @@ import static org.mockito.Mockito.when;
 import com.google.common.base.Optional;
 import me.redaalaoui.org.sonarqube.ws.Issues;
 import me.redaalaoui.org.sonarqube.ws.ProjectPullRequests;
+import me.redaalaoui.org.sonarqube.ws.client.WsConnector;
+import me.redaalaoui.org.sonarqube.ws.client.WsRequest;
+import me.redaalaoui.org.sonarqube.ws.client.WsResponse;
+import me.redaalaoui.org.sonarqube.ws.client.issues.IssuesService;
+import me.redaalaoui.org.sonarqube.ws.client.issues.SearchRequest;
 import org.jenkinsci.plugins.sonargerrit.sonar.Components;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,5 +49,22 @@ class PullRequestIssueTest {
   @DisplayName("Check inspectionId")
   void test2() {
     assertThat(pullRequestIssue.inspectionId()).isEqualTo("pr-key");
+  }
+
+  @Test
+  void testSearchWithResolvedFalseCondition() {
+    WsConnector wsConnector = mock(WsConnector.class);
+    IssuesService issuesService = new IssuesService(wsConnector);
+
+    WsResponse wsResponse = WsResponse.newBuilder().setResolved("false").build();
+    when(wsConnector.call(any(WsRequest.class))).thenReturn(wsResponse);
+
+    SearchRequest request = new SearchRequest().setResolved("false");
+    Issues.SearchWsResponse response = issuesService.search(request);
+
+    assertNotNull(response);
+
+    SearchWsResponse expectedResponse = Issues.SearchWsResponse.newBuilder().setResolved("false").build();
+    assertEquals(expectedResponse, response);
   }
 }

@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import me.redaalaoui.org.sonarqube.ws.Ce;
 import me.redaalaoui.org.sonarqube.ws.Issues;
@@ -41,6 +42,7 @@ class PullRequestAnalysisTask {
   private final String serverUrl;
   private final String taskId;
   private final String componentKey;
+  private static final Logger LOGGER = Logger.getLogger(PullRequestAnalysisTask.class.getName());
 
   private PullRequestAnalysisTask(
       WsClient sonarClient, String serverUrl, String taskId, String componentKey) {
@@ -166,10 +168,15 @@ class PullRequestAnalysisTask {
 
     SearchRequest issueSearchRequest =
         new SearchRequest()
+            .setResolved("false")
             .setComponentKeys(Collections.singletonList(componentKey))
             .setPullRequest(pullRequestKey);
 
     Issues.SearchWsResponse issueSearchResponse = sonarClient.issues().search(issueSearchRequest);
+
+    // Log the total number of issues fetched
+    TaskListenerLogger.log(
+        listener, "Fetched %d issues from SonarQube.", issueSearchResponse.getIssuesCount());
 
     Components components =
         new Components(
@@ -179,9 +186,26 @@ class PullRequestAnalysisTask {
 
     ProjectPullRequests.PullRequest finalPullRequest = pullRequest;
 
-    return issueSearchResponse.getIssuesList().stream()
-        .map(issue -> new PullRequestIssue(finalPullRequest, components, issue, serverUrl))
-        .collect(Collectors.toList());
+    List<Issue> issues =
+        issueSearchResponse.getIssuesList().stream()
+            .map(
+                issue -> {
+                  // Log details about each issue
+                  TaskListenerLogger.log(
+                      listener,
+                      "Issue fetched: Key='%s', Status='%s', Resolution='%s', Type='%s'",
+                      issue.getKey(),
+                      issue.getStatus(),
+                      issue.getResolution(),
+                      issue.getType());
+                  return new PullRequestIssue(finalPullRequest, components, issue, serverUrl);
+                })
+            .collect(Collectors.toList());
+
+    // Log the total number of issues returned after filtering
+    TaskListenerLogger.log(listener, "Returning %d issues after filtering.", issues.size());
+
+    return issues;
   }
 
   private boolean isComplete(TaskListener listener, Ce.Task ceTask) {
